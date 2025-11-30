@@ -90,6 +90,38 @@ def apply_rotary_enc(
     return xq_out.type_as(xq).to(xq.device), xk_out.type_as(xk).to(xk.device)
 
 
+def apply_rotary_enc2(
+    xq: torch.Tensor,
+    xk: torch.Tensor,
+    freqs_cos: torch.Tensor,
+    freqs_sin: torch.Tensor,
+    repeat_freqs_k: bool = False,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    # return xq, xk
+
+    xq_reshaped = xq.view(*xq.shape[:-1], -1, 2)
+    xq_cos = xq_reshaped[..., 0]
+    xq_sin = xq_reshaped[..., 1]
+
+    xk_reshaped = xk.view(*xk.shape[:-1], -1, 2)
+    xk_cos = xk_reshaped[..., 0]
+    xk_sin = xk_reshaped[..., 1]
+
+    freqs_cos = freqs_cos[None, None]
+    freqs_sin = freqs_sin[None, None]
+
+    xq_out = torch.stack([
+        xq_cos * freqs_cos - xq_sin * freqs_sin,
+        xq_cos * freqs_sin + xq_sin * freqs_cos
+    ], dim=-1).flatten(3)
+    xk_out = torch.stack([
+        xk_cos * freqs_cos - xk_sin * freqs_sin,
+        xk_cos * freqs_sin + xk_sin * freqs_cos
+    ], dim=-1).flatten(3)
+
+    return xq_out, xk_out
+
+
 def window_partition(x: Tensor, window_size: int) -> Tuple[Tensor, Tuple[int, int]]:
     """
     Partition into non-overlapping windows with padding if needed.
@@ -460,8 +492,15 @@ class Attention(nn.Module):
         if not self.use_rope:
             return q, k
 
-        assert self.freqs_cis is not None
-        return apply_rotary_enc(q, k, freqs_cis=self.freqs_cis)
+        if hasattr(self, "freqs_cis"):
+            assert self.freqs_cis is not None
+            return apply_rotary_enc(q, k, freqs_cis=self.freqs_cis)
+        else:
+            # XXX: onnx/infer_torch.py replaces freqs_cis with freqs_{cos,sin} because
+            # onnx export doesn't work well with complex numbers
+            assert self.freqs_cos is not None
+            assert self.freqs_sin is not None
+            return apply_rotary_enc2(q, k, freqs_cos=self.freqs_cos, freqs_sin=self.freqs_sin)
 
     def forward(self, x: Tensor) -> Tensor:
         s = 1 if self.cls_token else 0  # used to exclude cls_token
