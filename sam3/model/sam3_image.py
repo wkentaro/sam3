@@ -423,6 +423,7 @@ class Sam3Image(torch.nn.Module):
                 else:
                     out[k] = v
         else:
+            assert 0
             backbone_out.pop("backbone_fpn", None)
 
     def _get_best_mask(self, out):
@@ -450,6 +451,7 @@ class Sam3Image(torch.nn.Module):
             prompt, prompt_mask, backbone_out = self._encode_prompt(
                 backbone_out, find_input, geometric_prompt
             )
+        # return prompt
         # Run the encoder
         with torch.profiler.record_function("SAM3Image._run_encoder"):
             backbone_out, encoder_out, _ = self._run_encoder(
@@ -462,6 +464,7 @@ class Sam3Image(torch.nn.Module):
                 "backbone_out": backbone_out,
             },
         }
+        # return out["encoder_hidden_states"]
 
         # Run the decoder
         with torch.profiler.record_function("SAM3Image._run_decoder"):
@@ -474,6 +477,7 @@ class Sam3Image(torch.nn.Module):
                 prompt_mask=prompt_mask,
                 encoder_out=encoder_out,
             )
+        # return out
 
         # Run segmentation heads
         with torch.profiler.record_function("SAM3Image._run_segmentation_heads"):
@@ -489,6 +493,7 @@ class Sam3Image(torch.nn.Module):
             )
 
         if self.training or self.num_interactive_steps_val > 0:
+            assert 0
             self._compute_matching(out, self.back_convert(find_target))
         return out
 

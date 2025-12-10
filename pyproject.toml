@@ -44,6 +44,7 @@ dependencies = [
     "onnx>=1.19.0",
     "ml-dtypes==0.5.4",
     "onnx-graphsurgeon>=0.5.8",
+    "osam>=0.2.5",
 ]
 
 [project.optional-dependencies]

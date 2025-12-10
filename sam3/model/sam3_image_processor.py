@@ -195,10 +195,9 @@ class Sam3Processor:
         presence_score = outputs["presence_logit_dec"].sigmoid().unsqueeze(1)
         out_probs = (out_probs * presence_score).squeeze(-1)
 
-        keep = out_probs > self.confidence_threshold
-        out_probs = out_probs[keep]
-        out_masks = out_masks[keep]
-        out_bbox = out_bbox[keep]
+        out_bbox = out_bbox[out_probs > self.confidence_threshold]
+        out_masks = out_masks[out_probs > self.confidence_threshold]
+        out_probs = out_probs[out_probs > self.confidence_threshold]
 
         # convert to [x0, y0, x1, y1] format
         boxes = box_ops.box_cxcywh_to_xyxy(out_bbox)
