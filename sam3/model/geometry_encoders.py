@@ -598,6 +598,13 @@ class SequenceGeometryEncoder(nn.Module):
         self.use_act_ckpt = use_act_ckpt
 
     def _encode_points(self, points, points_mask, points_labels, img_feats):
+        # FIXME: disable points encoding because this function is not onnx compatible
+        assert len(points) == 0
+        return (
+            torch.empty((0, 1, 256), device=points.device, dtype=torch.float32),
+            torch.empty((1, 0), device=points.device, dtype=torch.bool),
+        )
+
         points_embed = None
         n_points, bs = points.shape[:2]
 
@@ -641,6 +648,13 @@ class SequenceGeometryEncoder(nn.Module):
         return type_embed + points_embed, points_mask
 
     def _encode_boxes(self, boxes, boxes_mask, boxes_labels, img_feats):
+        # FIXME: disable box encoding because scale.pin_memory() is not onnx compatible
+        assert len(boxes) == 0
+        return (
+            torch.empty((0, 1, 256), device=boxes.device, dtype=torch.float32),
+            torch.empty((1, 0), device=boxes.device, dtype=torch.bool),
+        )
+
         boxes_embed = None
         n_boxes, bs = boxes.shape[:2]
 

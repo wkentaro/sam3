@@ -423,6 +423,7 @@ class Sam3Image(torch.nn.Module):
                 else:
                     out[k] = v
         else:
+            assert 0
             backbone_out.pop("backbone_fpn", None)
 
     def _get_best_mask(self, out):
@@ -489,6 +490,7 @@ class Sam3Image(torch.nn.Module):
             )
 
         if self.training or self.num_interactive_steps_val > 0:
+            assert 0
             self._compute_matching(out, self.back_convert(find_target))
         return out
 

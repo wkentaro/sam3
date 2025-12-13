@@ -110,6 +110,7 @@ class SegmentationHead(nn.Module):
         image_ids_ = image_ids.to(feature_device)
         if self.use_encoder_inputs:
             if backbone_feats[0].shape[0] > 1:
+                assert 0
                 # For bs > 1, we construct the per query backbone features
                 backbone_visual_feats = []
                 for feat in backbone_feats:
@@ -126,13 +127,14 @@ class SegmentationHead(nn.Module):
             )
 
             backbone_visual_feats[-1] = encoder_visual_embed
-            if self.act_ckpt:
+            if 0 and self.act_ckpt:
                 pixel_embed = checkpoint.checkpoint(
                     self.pixel_decoder, backbone_visual_feats, use_reentrant=False
                 )
             else:
                 pixel_embed = self.pixel_decoder(backbone_visual_feats)
         else:
+            assert 0
             backbone_feats = [x.to(model_device) for x in backbone_feats]
             pixel_embed = self.pixel_decoder(backbone_feats)
             if pixel_embed.shape[0] == 1:
