@@ -54,8 +54,12 @@ class Sam3Processor:
         image = v2.functional.to_image(image).to(self.device)
         image = self.transform(image).unsqueeze(0)
 
-        state["original_height"] = height
-        state["original_width"] = width
+        state["original_height"] = torch.tensor(
+            height, dtype=torch.int64, device=self.device
+        )
+        state["original_width"] = torch.tensor(
+            width, dtype=torch.int64, device=self.device
+        )
         state["backbone_out"] = self.model.backbone.forward_image(image)
         inst_interactivity_en = self.model.inst_interactive_predictor is not None
         if inst_interactivity_en and "sam2_backbone_out" in state["backbone_out"]:
@@ -204,7 +208,7 @@ class Sam3Processor:
 
         img_h = state["original_height"]
         img_w = state["original_width"]
-        scale_fct = torch.tensor([img_w, img_h, img_w, img_h]).to(self.device)
+        scale_fct = torch.cat([img_w[None], img_h[None], img_w[None], img_h[None]])
         boxes = boxes * scale_fct[None, :]
 
         out_masks = interpolate(
