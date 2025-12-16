@@ -648,13 +648,6 @@ class SequenceGeometryEncoder(nn.Module):
         return type_embed + points_embed, points_mask
 
     def _encode_boxes(self, boxes, boxes_mask, boxes_labels, img_feats):
-        # FIXME: disable box encoding because scale.pin_memory() is not onnx compatible
-        assert len(boxes) == 0
-        return (
-            torch.empty((0, 1, 256), device=boxes.device, dtype=torch.float32),
-            torch.empty((1, 0), device=boxes.device, dtype=torch.bool),
-        )
-
         boxes_embed = None
         n_boxes, bs = boxes.shape[:2]
 
@@ -662,6 +655,8 @@ class SequenceGeometryEncoder(nn.Module):
             proj = self.boxes_direct_project(boxes)
             assert boxes_embed is None
             boxes_embed = proj
+        else:
+            assert 0
 
         if self.boxes_pool_project is not None:
             H, W = img_feats.shape[-2:]
@@ -670,7 +665,11 @@ class SequenceGeometryEncoder(nn.Module):
             # We need to denormalize, and convert to [x, y, x, y]
             boxes_xyxy = box_cxcywh_to_xyxy(boxes)
             scale = torch.tensor([W, H, W, H], dtype=boxes_xyxy.dtype)
-            scale = scale.pin_memory().to(device=boxes_xyxy.device, non_blocking=True)
+            #
+            # XXX: pin_memory() is not onnx compatible
+            # scale = scale.pin_memory().to(device=boxes_xyxy.device, non_blocking=True)
+            scale = scale.to(device=boxes_xyxy.device, non_blocking=True)
+            #
             scale = scale.view(1, 1, 4)
             boxes_xyxy = boxes_xyxy * scale
             sampled = torchvision.ops.roi_align(
@@ -685,9 +684,12 @@ class SequenceGeometryEncoder(nn.Module):
             proj = self.boxes_pool_project(sampled)
             proj = proj.view(bs, n_boxes, self.d_model).transpose(0, 1)
             if boxes_embed is None:
+                assert 0
                 boxes_embed = proj
             else:
                 boxes_embed = boxes_embed + proj
+        else:
+            assert 0
 
         if self.boxes_pos_enc_project is not None:
             cx, cy, w, h = boxes.unbind(-1)
@@ -819,9 +821,12 @@ class SequenceGeometryEncoder(nn.Module):
                 img_feats=img_feats,
             )
 
-            final_embeds, final_mask = concat_padded_sequences(
-                final_embeds, final_mask, boxes_embeds, boxes_mask
-            )
+            if 1:
+                final_embeds, final_mask = boxes_embeds, boxes_mask
+            else:
+                final_embeds, final_mask = concat_padded_sequences(
+                    final_embeds, final_mask, boxes_embeds, boxes_mask
+                )
 
         if masks is not None and self.mask_encoder is not None:
             masks_embed, masks_mask = self._encode_masks(
