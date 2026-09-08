@@ -25,6 +25,7 @@ from .model_misc import (
     get_clones,
     inverse_sigmoid,
     MLP,
+    MultiheadAttentionWrapper,
 )
 
 
@@ -49,7 +50,11 @@ class TransformerDecoderLayer(nn.Module):
         # cross attention text
         self.use_text_cross_attention = use_text_cross_attention
         if use_text_cross_attention:
-            self.ca_text = nn.MultiheadAttention(d_model, n_heads, dropout=dropout)
+            # XXX: MultiheadAttentionWrapper (vs nn.MultiheadAttention) keeps the
+            # text+prompt sequence length dynamic in the onnx export
+            self.ca_text = MultiheadAttentionWrapper(
+                d_model, n_heads, dropout=dropout
+            )
             self.catext_dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
             self.catext_norm = nn.LayerNorm(d_model)
 
