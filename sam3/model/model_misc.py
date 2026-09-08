@@ -29,9 +29,80 @@ def inverse_sigmoid(x, eps=1e-3):
 
 
 class MultiheadAttentionWrapper(nn.MultiheadAttention):
-    def forward(self, *args, **kwargs):
-        kwargs["need_weights"] = False
-        return super().forward(*args, **kwargs)
+    # XXX: nn.MultiheadAttention bakes sequence lengths into reshape constants when
+    # traced for onnx export, which breaks dynamic prompt lengths. Re-implement the
+    # forward with export-friendly ops (only the batch size is baked, which is fine
+    # since exported graphs use a fixed batch size).
+    def forward(
+        self,
+        query,
+        key,
+        value,
+        key_padding_mask=None,
+        need_weights=False,
+        attn_mask=None,
+    ):
+        assert self.bias_k is None and self.bias_v is None
+        assert not self.add_zero_attn
+
+        if self.batch_first:
+            query = query.transpose(0, 1)
+            key = key.transpose(0, 1)
+            value = value.transpose(0, 1)
+
+        embed_dim = self.embed_dim
+        num_heads = self.num_heads
+        head_dim = self.head_dim
+        bsz = query.shape[1]
+
+        w = self.in_proj_weight
+        b = self.in_proj_bias
+        q = F.linear(query, w[:embed_dim], None if b is None else b[:embed_dim])
+        k = F.linear(
+            key,
+            w[embed_dim : 2 * embed_dim],
+            None if b is None else b[embed_dim : 2 * embed_dim],
+        )
+        v = F.linear(
+            value, w[2 * embed_dim :], None if b is None else b[2 * embed_dim :]
+        )
+
+        q = q.view(-1, bsz * num_heads, head_dim).transpose(0, 1)
+        k = k.view(-1, bsz * num_heads, head_dim).transpose(0, 1)
+        v = v.view(-1, bsz * num_heads, head_dim).transpose(0, 1)
+
+        mask = None
+        if attn_mask is not None:
+            mask = attn_mask
+            if mask.dtype == torch.bool:
+                mask = torch.zeros_like(mask, dtype=q.dtype).masked_fill(
+                    mask, float("-inf")
+                )
+            if mask.dim() == 2:
+                mask = mask.unsqueeze(0)
+        if key_padding_mask is not None:
+            kpm = torch.zeros_like(key_padding_mask, dtype=q.dtype).masked_fill(
+                key_padding_mask, float("-inf")
+            )
+            kpm = (
+                kpm.view(bsz, 1, 1, -1)
+                .expand(bsz, num_heads, 1, -1)
+                .reshape(bsz * num_heads, 1, -1)
+            )
+            mask = kpm if mask is None else mask + kpm
+
+        out = F.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=mask,
+            dropout_p=self.dropout if self.training else 0.0,
+        )
+        out = out.transpose(0, 1).contiguous().view(-1, bsz, embed_dim)
+        out = self.out_proj(out)
+        if self.batch_first:
+            out = out.transpose(0, 1)
+        return out, None
 
 
 class DotProductScoring(torch.nn.Module):
